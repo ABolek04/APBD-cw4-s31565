@@ -5,15 +5,14 @@ namespace LegacyRenewalApp
     public class SubscriptionRenewalService
     {
         private readonly IDefaultVerification _defaultVerification;
-        private readonly IDiscount _discountCalculator;
-        private readonly ISupportFee _supportFee;
+        private readonly ICalculator _calculator;
 
         public SubscriptionRenewalService()
         {
             _defaultVerification = new DefaultVerification();
-            _discountCalculator = new DiscountCalculator();
-            _supportFee = new SupportFee();
+            _calculator = new Calculator();
         }
+        
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
             string planCode,
@@ -29,77 +28,17 @@ namespace LegacyRenewalApp
             var planRepository = new SubscriptionPlanRepository();
 
             var customer = customerRepository.GetById(customerId);
-            _defaultVerification.Verify(customer,planCode, seatCount, paymentMethod);
             var plan = planRepository.GetByCode(normalizedPlanCode);
             
-            decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
-            var discountResult = _discountCalculator.GetDiscountAmount(customer,baseAmount,plan,seatCount,useLoyaltyPoints);
-            string notes = discountResult.Note;
-            decimal subtotalAfterDiscount = baseAmount - discountResult.DiscountAmount;
-            if (subtotalAfterDiscount < 300m)
-            {
-                subtotalAfterDiscount = 300m;
-                notes += "minimum discounted subtotal applied; ";
-            }
+            _defaultVerification.Verify(customer,planCode, seatCount, paymentMethod);
 
-            decimal supportFee = 0m;
-            var supportResult = _supportFee.GetSupportFee(planCode, includePremiumSupport);
-            supportFee = supportResult.feeAmount;
-            notes += supportResult.note;
-
-            decimal paymentFee = 0m;
-            if (normalizedPaymentMethod == "CARD")
-            {
-                paymentFee = (subtotalAfterDiscount + supportFee) * 0.02m;
-                notes += "card payment fee; ";
-            }
-            else if (normalizedPaymentMethod == "BANK_TRANSFER")
-            {
-                paymentFee = (subtotalAfterDiscount + supportFee) * 0.01m;
-                notes += "bank transfer fee; ";
-            }
-            else if (normalizedPaymentMethod == "PAYPAL")
-            {
-                paymentFee = (subtotalAfterDiscount + supportFee) * 0.035m;
-                notes += "paypal fee; ";
-            }
-            else if (normalizedPaymentMethod == "INVOICE")
-            {
-                paymentFee = 0m;
-                notes += "invoice payment; ";
-            }
-            else
-            {
-                throw new ArgumentException("Unsupported payment method");
-            }
-
-            decimal taxRate = 0.20m;
-            if (customer.Country == "Poland")
-            {
-                taxRate = 0.23m;
-            }
-            else if (customer.Country == "Germany")
-            {
-                taxRate = 0.19m;
-            }
-            else if (customer.Country == "Czech Republic")
-            {
-                taxRate = 0.21m;
-            }
-            else if (customer.Country == "Norway")
-            {
-                taxRate = 0.25m;
-            }
-
-            decimal taxBase = subtotalAfterDiscount + supportFee + paymentFee;
-            decimal taxAmount = taxBase * taxRate;
-            decimal finalAmount = taxBase + taxAmount;
-
-            if (finalAmount < 500m)
-            {
-                finalAmount = 500m;
-                notes += "minimum invoice amount applied; ";
-            }
+            var calculatorResult = _calculator.Calculate(
+                customer,
+                plan,
+                seatCount,
+                normalizedPaymentMethod,
+                includePremiumSupport,
+                useLoyaltyPoints);
 
             var invoice = new RenewalInvoice
             {
@@ -108,13 +47,13 @@ namespace LegacyRenewalApp
                 PlanCode = normalizedPlanCode,
                 PaymentMethod = normalizedPaymentMethod,
                 SeatCount = seatCount,
-                BaseAmount = Math.Round(baseAmount, 2, MidpointRounding.AwayFromZero),
-                DiscountAmount = Math.Round(discountResult.DiscountAmount ,2, MidpointRounding.AwayFromZero),
-                SupportFee = Math.Round(supportFee, 2, MidpointRounding.AwayFromZero),
-                PaymentFee = Math.Round(paymentFee, 2, MidpointRounding.AwayFromZero),
-                TaxAmount = Math.Round(taxAmount, 2, MidpointRounding.AwayFromZero),
-                FinalAmount = Math.Round(finalAmount, 2, MidpointRounding.AwayFromZero),
-                Notes = notes.Trim(),
+                BaseAmount = Math.Round(calculatorResult.BaseAmount, 2, MidpointRounding.AwayFromZero),
+                DiscountAmount = Math.Round(calculatorResult.DiscountAmount ,2, MidpointRounding.AwayFromZero),
+                SupportFee = Math.Round(calculatorResult.SupportFee, 2, MidpointRounding.AwayFromZero),
+                PaymentFee = Math.Round(calculatorResult.PaymentFee, 2, MidpointRounding.AwayFromZero),
+                TaxAmount = Math.Round(calculatorResult.TaxAmount, 2, MidpointRounding.AwayFromZero),
+                FinalAmount = Math.Round(calculatorResult.FinalAmount, 2, MidpointRounding.AwayFromZero),
+                Notes = calculatorResult.Notes.Trim(),
                 GeneratedAt = DateTime.UtcNow
             };
 
