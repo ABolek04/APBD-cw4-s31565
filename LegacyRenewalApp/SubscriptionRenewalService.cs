@@ -6,11 +6,13 @@ namespace LegacyRenewalApp
     {
         private readonly IDefaultVerification _defaultVerification;
         private readonly IDiscount _discountCalculator;
+        private readonly ISupportFee _supportFee;
 
         public SubscriptionRenewalService()
         {
             _defaultVerification = new DefaultVerification();
             _discountCalculator = new DiscountCalculator();
+            _supportFee = new SupportFee();
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -20,7 +22,6 @@ namespace LegacyRenewalApp
             bool includePremiumSupport,
             bool useLoyaltyPoints)
         {
-            _defaultVerification.Verify(customerId,planCode, seatCount, paymentMethod);
             string normalizedPlanCode = planCode.Trim().ToUpperInvariant();
             string normalizedPaymentMethod = paymentMethod.Trim().ToUpperInvariant();
 
@@ -28,12 +29,8 @@ namespace LegacyRenewalApp
             var planRepository = new SubscriptionPlanRepository();
 
             var customer = customerRepository.GetById(customerId);
+            _defaultVerification.Verify(customer,planCode, seatCount, paymentMethod);
             var plan = planRepository.GetByCode(normalizedPlanCode);
-
-            if (!customer.IsActive)
-            {
-                throw new InvalidOperationException("Inactive customers cannot renew subscriptions");
-            }
             
             decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
             var discountResult = _discountCalculator.GetDiscountAmount(customer,baseAmount,plan,seatCount,useLoyaltyPoints);
@@ -46,23 +43,9 @@ namespace LegacyRenewalApp
             }
 
             decimal supportFee = 0m;
-            if (includePremiumSupport)
-            {
-                if (normalizedPlanCode == "START")
-                {
-                    supportFee = 250m;
-                }
-                else if (normalizedPlanCode == "PRO")
-                {
-                    supportFee = 400m;
-                }
-                else if (normalizedPlanCode == "ENTERPRISE")
-                {
-                    supportFee = 700m;
-                }
-
-                notes += "premium support included; ";
-            }
+            var supportResult = _supportFee.GetSupportFee(planCode, includePremiumSupport);
+            supportFee = supportResult.feeAmount;
+            notes += supportResult.note;
 
             decimal paymentFee = 0m;
             if (normalizedPaymentMethod == "CARD")
