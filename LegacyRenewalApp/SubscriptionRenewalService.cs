@@ -4,6 +4,14 @@ namespace LegacyRenewalApp
 {
     public class SubscriptionRenewalService
     {
+        private readonly IDefaultVerification _defaultVerification;
+        private readonly IDiscount _segmentDiscount;
+
+        public SubscriptionRenewalService()
+        {
+            _defaultVerification = new DefaultVerification();
+            _segmentDiscount = new SegmentDiscount();
+        }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
             string planCode,
@@ -12,26 +20,7 @@ namespace LegacyRenewalApp
             bool includePremiumSupport,
             bool useLoyaltyPoints)
         {
-            if (customerId <= 0)
-            {
-                throw new ArgumentException("Customer id must be positive");
-            }
-
-            if (string.IsNullOrWhiteSpace(planCode))
-            {
-                throw new ArgumentException("Plan code is required");
-            }
-
-            if (seatCount <= 0)
-            {
-                throw new ArgumentException("Seat count must be positive");
-            }
-
-            if (string.IsNullOrWhiteSpace(paymentMethod))
-            {
-                throw new ArgumentException("Payment method is required");
-            }
-
+            _defaultVerification.Verify(customerId,planCode, seatCount, paymentMethod);
             string normalizedPlanCode = planCode.Trim().ToUpperInvariant();
             string normalizedPaymentMethod = paymentMethod.Trim().ToUpperInvariant();
 
@@ -45,31 +34,14 @@ namespace LegacyRenewalApp
             {
                 throw new InvalidOperationException("Inactive customers cannot renew subscriptions");
             }
-
+            
             decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
             decimal discountAmount = 0m;
             string notes = string.Empty;
 
-            if (customer.Segment == "Silver")
-            {
-                discountAmount += baseAmount * 0.05m;
-                notes += "silver discount; ";
-            }
-            else if (customer.Segment == "Gold")
-            {
-                discountAmount += baseAmount * 0.10m;
-                notes += "gold discount; ";
-            }
-            else if (customer.Segment == "Platinum")
-            {
-                discountAmount += baseAmount * 0.15m;
-                notes += "platinum discount; ";
-            }
-            else if (customer.Segment == "Education" && plan.IsEducationEligible)
-            {
-                discountAmount += baseAmount * 0.20m;
-                notes += "education discount; ";
-            }
+            var segmentResult = _segmentDiscount.GetDiscountAmount(customer, baseAmount, plan);
+            discountAmount =  segmentResult.DiscountAmount;
+            notes = segmentResult.Note;
 
             if (customer.YearsWithCompany >= 5)
             {
