@@ -6,11 +6,13 @@ namespace LegacyRenewalApp
     {
         private readonly IDefaultVerification _defaultVerification;
         private readonly IDiscount _segmentDiscount;
+        private readonly IDiscount _loyaltyDiscount;
 
         public SubscriptionRenewalService()
         {
             _defaultVerification = new DefaultVerification();
             _segmentDiscount = new SegmentDiscount();
+            _loyaltyDiscount = new LoyaltyDiscount();
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -40,20 +42,12 @@ namespace LegacyRenewalApp
             string notes = string.Empty;
 
             var segmentResult = _segmentDiscount.GetDiscountAmount(customer, baseAmount, plan);
-            discountAmount =  segmentResult.DiscountAmount;
-            notes = segmentResult.Note;
-
-            if (customer.YearsWithCompany >= 5)
-            {
-                discountAmount += baseAmount * 0.07m;
-                notes += "long-term loyalty discount; ";
-            }
-            else if (customer.YearsWithCompany >= 2)
-            {
-                discountAmount += baseAmount * 0.03m;
-                notes += "basic loyalty discount; ";
-            }
-
+            discountAmount +=  segmentResult.DiscountAmount;
+            notes += segmentResult.Note;
+            var loyaltyDiscount = _loyaltyDiscount.GetDiscountAmount(customer, baseAmount, plan);
+            discountAmount +=  loyaltyDiscount.DiscountAmount;
+            notes += loyaltyDiscount.Note;
+            
             if (seatCount >= 50)
             {
                 discountAmount += baseAmount * 0.12m;
