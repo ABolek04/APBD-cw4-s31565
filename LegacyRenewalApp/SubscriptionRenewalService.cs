@@ -7,12 +7,14 @@ namespace LegacyRenewalApp
         private readonly IDefaultVerification _defaultVerification;
         private readonly IDiscount _segmentDiscount;
         private readonly IDiscount _loyaltyDiscount;
+        private readonly IDiscount _seatDiscount;
 
         public SubscriptionRenewalService()
         {
             _defaultVerification = new DefaultVerification();
             _segmentDiscount = new SegmentDiscount();
             _loyaltyDiscount = new LoyaltyDiscount();
+            _seatDiscount = new SeatCountDiscount();
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -41,28 +43,15 @@ namespace LegacyRenewalApp
             decimal discountAmount = 0m;
             string notes = string.Empty;
 
-            var segmentResult = _segmentDiscount.GetDiscountAmount(customer, baseAmount, plan);
+            var segmentResult = _segmentDiscount.GetDiscountAmount(customer, baseAmount, plan, seatCount);
             discountAmount +=  segmentResult.DiscountAmount;
             notes += segmentResult.Note;
-            var loyaltyDiscount = _loyaltyDiscount.GetDiscountAmount(customer, baseAmount, plan);
+            var loyaltyDiscount = _loyaltyDiscount.GetDiscountAmount(customer, baseAmount, plan, seatCount);
             discountAmount +=  loyaltyDiscount.DiscountAmount;
             notes += loyaltyDiscount.Note;
-            
-            if (seatCount >= 50)
-            {
-                discountAmount += baseAmount * 0.12m;
-                notes += "large team discount; ";
-            }
-            else if (seatCount >= 20)
-            {
-                discountAmount += baseAmount * 0.08m;
-                notes += "medium team discount; ";
-            }
-            else if (seatCount >= 10)
-            {
-                discountAmount += baseAmount * 0.04m;
-                notes += "small team discount; ";
-            }
+            var seatCountDiscount = _seatDiscount.GetDiscountAmount(customer, baseAmount, plan, seatCount);
+            discountAmount += seatCountDiscount.DiscountAmount;
+            notes += seatCountDiscount.Note;
 
             if (useLoyaltyPoints && customer.LoyaltyPoints > 0)
             {

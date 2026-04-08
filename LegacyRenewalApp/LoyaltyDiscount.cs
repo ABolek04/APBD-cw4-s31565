@@ -3,7 +3,7 @@
 public class LoyaltyDiscount : IDiscount
 {
     public (decimal DiscountAmount, string Note) GetDiscountAmount(Customer customer, decimal baseAmount,
-        SubscriptionPlan plan)
+        SubscriptionPlan plan, int seatCount)
     {
         if (customer.YearsWithCompany >= 5)
         {
