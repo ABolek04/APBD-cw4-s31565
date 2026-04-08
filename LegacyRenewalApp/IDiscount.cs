@@ -2,5 +2,5 @@
 
 public interface IDiscount
 {
-     public (decimal DiscountAmount,string Note) GetDiscountAmount(Customer customer, decimal baseAmount, SubscriptionPlan plan,int seatCount);
+     public (decimal DiscountAmount,string Note) GetDiscountAmount(Customer customer, decimal baseAmount, SubscriptionPlan plan,int seatCount, bool usePoints);
 }

@@ -5,16 +5,12 @@ namespace LegacyRenewalApp
     public class SubscriptionRenewalService
     {
         private readonly IDefaultVerification _defaultVerification;
-        private readonly IDiscount _segmentDiscount;
-        private readonly IDiscount _loyaltyDiscount;
-        private readonly IDiscount _seatDiscount;
+        private readonly IDiscount _discountCalculator;
 
         public SubscriptionRenewalService()
         {
             _defaultVerification = new DefaultVerification();
-            _segmentDiscount = new SegmentDiscount();
-            _loyaltyDiscount = new LoyaltyDiscount();
-            _seatDiscount = new SeatCountDiscount();
+            _discountCalculator = new DiscountCalculator();
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -40,27 +36,9 @@ namespace LegacyRenewalApp
             }
             
             decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
-            decimal discountAmount = 0m;
-            string notes = string.Empty;
-
-            var segmentResult = _segmentDiscount.GetDiscountAmount(customer, baseAmount, plan, seatCount);
-            discountAmount +=  segmentResult.DiscountAmount;
-            notes += segmentResult.Note;
-            var loyaltyDiscount = _loyaltyDiscount.GetDiscountAmount(customer, baseAmount, plan, seatCount);
-            discountAmount +=  loyaltyDiscount.DiscountAmount;
-            notes += loyaltyDiscount.Note;
-            var seatCountDiscount = _seatDiscount.GetDiscountAmount(customer, baseAmount, plan, seatCount);
-            discountAmount += seatCountDiscount.DiscountAmount;
-            notes += seatCountDiscount.Note;
-
-            if (useLoyaltyPoints && customer.LoyaltyPoints > 0)
-            {
-                int pointsToUse = customer.LoyaltyPoints > 200 ? 200 : customer.LoyaltyPoints;
-                discountAmount += pointsToUse;
-                notes += $"loyalty points used: {pointsToUse}; ";
-            }
-
-            decimal subtotalAfterDiscount = baseAmount - discountAmount;
+            var discountResult = _discountCalculator.GetDiscountAmount(customer,baseAmount,plan,seatCount,useLoyaltyPoints);
+            string notes = discountResult.Note;
+            decimal subtotalAfterDiscount = baseAmount - discountResult.DiscountAmount;
             if (subtotalAfterDiscount < 300m)
             {
                 subtotalAfterDiscount = 300m;
@@ -148,7 +126,7 @@ namespace LegacyRenewalApp
                 PaymentMethod = normalizedPaymentMethod,
                 SeatCount = seatCount,
                 BaseAmount = Math.Round(baseAmount, 2, MidpointRounding.AwayFromZero),
-                DiscountAmount = Math.Round(discountAmount, 2, MidpointRounding.AwayFromZero),
+                DiscountAmount = Math.Round(discountResult.DiscountAmount ,2, MidpointRounding.AwayFromZero),
                 SupportFee = Math.Round(supportFee, 2, MidpointRounding.AwayFromZero),
                 PaymentFee = Math.Round(paymentFee, 2, MidpointRounding.AwayFromZero),
                 TaxAmount = Math.Round(taxAmount, 2, MidpointRounding.AwayFromZero),

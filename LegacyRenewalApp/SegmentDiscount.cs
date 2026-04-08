@@ -3,7 +3,7 @@
 public class SegmentDiscount : IDiscount
 {
     public (decimal DiscountAmount, string Note) GetDiscountAmount(Customer customer, decimal baseAmount,
-        SubscriptionPlan plan, int seatCount)
+        SubscriptionPlan plan, int seatCount, bool usePoints)
     {
         return customer.Segment switch
         {
